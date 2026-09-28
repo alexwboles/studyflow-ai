@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StudyFlow — AI study planner with spaced repetition</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header>
+  <div class="brand">📚 StudyFlow</div>
+  <p class="tagline">Spaced repetition, minus the cramming.</p>
+</header>
+
+<nav id="tabs">
+  <button data-tab="setup">Setup</button>
+  <button data-tab="today">Today</button>
+  <button data-tab="schedule">Schedule</button>
+  <button data-tab="progress">Progress</button>
+  <button data-tab="cards">Flashcards</button>
+</nav>
+
+<main>
+  <section id="view-setup" class="view"></section>
+  <section id="view-today" class="view"></section>
+  <section id="view-schedule" class="view"></section>
+  <section id="view-progress" class="view"></section>
+  <section id="view-cards" class="view"></section>
+</main>
+
+<footer>
+  <p class="muted small">StudyFlow runs 100% in your browser. Your plan never leaves this device.</p>
+</footer>
+
+<script src="js/logic.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
