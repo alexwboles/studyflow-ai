@@ -8,19 +8,23 @@
 </head>
 <body>
 <header>
-  <div class="brand">📚 StudyFlow</div>
-  <p class="tagline">Spaced repetition, minus the cramming.</p>
+  <div class="container header-inner">
+    <div class="brand">StudyFlow</div>
+    <p class="tagline">Spaced repetition, minus the cramming.</p>
+  </div>
 </header>
 
-<nav id="tabs">
-  <button data-tab="setup">Setup</button>
-  <button data-tab="today">Today</button>
-  <button data-tab="schedule">Schedule</button>
-  <button data-tab="progress">Progress</button>
-  <button data-tab="cards">Flashcards</button>
+<nav id="tabs" aria-label="StudyFlow views">
+  <div class="container tabs-inner">
+    <button id="tab-setup" data-tab="setup">Setup</button>
+    <button id="tab-today" data-tab="today">Today</button>
+    <button id="tab-schedule" data-tab="schedule">Schedule</button>
+    <button id="tab-progress" data-tab="progress">Progress</button>
+    <button id="tab-cards" data-tab="cards">Flashcards</button>
+  </div>
 </nav>
 
-<main>
+<main class="container">
   <section id="view-setup" class="view"></section>
   <section id="view-today" class="view"></section>
   <section id="view-schedule" class="view"></section>
@@ -29,7 +33,9 @@
 </main>
 
 <footer>
-  <p class="muted small">StudyFlow runs 100% in your browser. Your plan never leaves this device.</p>
+  <div class="container">
+    <p class="muted small">StudyFlow runs 100% in your browser. Your plan never leaves this device.</p>
+  </div>
 </footer>
 
 <script src="js/logic.js"></script>

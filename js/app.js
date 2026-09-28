@@ -271,7 +271,7 @@
       if (!d.items.length) { card.appendChild(el('p', 'muted small', 'Rest day')); }
       d.items.forEach(function (it) {
         var line = el('p', 'small' + (isDone(d.date, it.key) ? ' struck' : ''),
-          (it.type === 'learn' ? '📖 ' : '🔁 ') + it.subject + ' — ' + it.topic + ' (' + it.minutes + 'm)');
+          (it.type === 'learn' ? 'Learn · ' : 'Review · ') + it.subject + ' — ' + it.topic + ' (' + it.minutes + 'm)');
         card.appendChild(line);
       });
       wrap.appendChild(card);
@@ -292,7 +292,7 @@
     over.appendChild(el('h3', null, 'Overall readiness: ' + Math.round(rep.overall * 100) + '%'));
     over.appendChild(bar(rep.overall));
     var streak = L.computeStreak(dayDoneCounts(), todayISO());
-    over.appendChild(el('p', null, '🔥 Streak: ' + streak + ' day' + (streak === 1 ? '' : 's')));
+    over.appendChild(el('p', null, 'Streak: ' + streak + ' day' + (streak === 1 ? '' : 's')));
     wrap.appendChild(over);
 
     rep.perSubject.forEach(function (p) {
@@ -340,7 +340,7 @@
           kp.classList.toggle('hidden');
           flip.textContent = kp.classList.contains('hidden') ? 'Reveal key points' : 'Hide key points';
         };
-        var ai = el('button', 'btn small', '✨ Explain with AI');
+        var ai = el('button', 'btn small', 'Explain with AI');
         ai.onclick = function () { explainWithAI(ai, s.name, t.name); };
         card.appendChild(kp);
         var row = el('div', 'actions');
