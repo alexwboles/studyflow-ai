@@ -12,6 +12,64 @@
     return e;
   }
 
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  /* ---------- focus timer (Today tab) ---------- */
+  var timerLeft = 0, timerTotal = 0, timerId = null;
+  function timerPaint() {
+    var d = document.getElementById('timer-display');
+    if (d) d.textContent = L.formatClock(timerLeft);
+    var st = document.getElementById('timer-state');
+    if (st) st.textContent = timerId ? (timerLeft <= 0 ? 'Done — take a breath.' : 'Focusing…') : (timerLeft > 0 ? 'Paused' : 'Ready');
+    var btn = document.getElementById('timer-toggle');
+    if (btn) btn.textContent = timerId ? 'Pause' : 'Start';
+  }
+  function timerTick() {
+    timerLeft--;
+    if (timerLeft <= 0) {
+      timerLeft = 0;
+      clearInterval(timerId); timerId = null;
+    }
+    timerPaint();
+  }
+  function timerToggle() {
+    if (timerId) { clearInterval(timerId); timerId = null; timerPaint(); return; }
+    if (timerLeft <= 0) {
+      var mins = parseInt((document.getElementById('timer-mins') || {}).value, 10);
+      timerTotal = timerLeft = (mins > 0 && mins <= 180 ? mins : 25) * 60;
+    }
+    timerId = setInterval(timerTick, 1000);
+    timerPaint();
+  }
+  function timerReset() {
+    if (timerId) { clearInterval(timerId); timerId = null; }
+    timerLeft = 0; timerTotal = 0;
+    timerPaint();
+  }
+  function renderTimerCard(wrap) {
+    var card = el('div', 'card timer-card');
+    card.appendChild(el('h3', null, 'Focus timer'));
+    var row = el('div', 'actions');
+    var mins = el('input'); mins.type = 'number'; mins.min = '1'; mins.max = '180';
+    mins.value = '25'; mins.id = 'timer-mins'; mins.setAttribute('aria-label', 'Focus minutes');
+    var disp = el('span', 'timer-display'); disp.id = 'timer-display';
+    disp.textContent = L.formatClock(timerLeft);
+    var toggle = el('button', 'btn small primary', timerId ? 'Pause' : 'Start');
+    toggle.id = 'timer-toggle'; toggle.onclick = timerToggle;
+    var reset = el('button', 'btn small', 'Reset');
+    reset.onclick = timerReset;
+    var state = el('span', 'muted small'); state.id = 'timer-state';
+    row.appendChild(mins); row.appendChild(disp); row.appendChild(toggle); row.appendChild(reset); row.appendChild(state);
+    card.appendChild(row);
+    card.appendChild(el('p', 'muted small', 'Set minutes, hit Start, and work one item at a time.'));
+    wrap.appendChild(card);
+    timerPaint();
+  }
+
   function load() {
     try { return JSON.parse(localStorage.getItem(LS_KEY)) || null; } catch (e) { return null; }
   }
@@ -223,9 +281,52 @@
     wrap.appendChild(el('h2', null, 'Today — ' + t));
     wrap.appendChild(el('p', 'muted', examIn === 0 ? 'Exam day. You\'ve got this.' : examIn + ' day' + (examIn === 1 ? '' : 's') + ' until the exam.'));
 
+    renderTimerCard(wrap);
+
+    // Catch-up backlog: undone items from earlier days.
+    var backlog = L.backlogItems(state.plan, state.days, t);
+    if (backlog.length) {
+      var bc = el('div', 'card backlog');
+      bc.appendChild(el('h3', null, 'Catch up (' + backlog.length + ' missed)'));
+      bc.appendChild(el('p', 'muted small', 'Items from earlier days you never marked done. Clear them before they pile up.'));
+      backlog.forEach(function (entry) {
+        var it = entry.item;
+        var line = el('div', 'backlog-row');
+        line.appendChild(el('span', 'badge ' + it.type, it.type === 'learn' ? 'LEARN' : 'REVIEW'));
+        var lbl = el('span', 'small', ' ' + it.subject + ' — ' + it.topic + ' ');
+        var when = el('span', 'muted small', '(' + entry.date + ')');
+        var done = el('button', 'btn small', 'Mark done');
+        done.onclick = (function (d, k, item) {
+          return function () { markDone(d, k, item); };
+        })(entry.date, it.key, it);
+        line.appendChild(lbl); line.appendChild(when); line.appendChild(done);
+        bc.appendChild(line);
+      });
+      wrap.appendChild(bc);
+    }
+
     if (!day || !day.items.length) {
       wrap.appendChild(el('p', 'muted', 'Nothing scheduled today. Rest or get ahead.'));
       return;
+    }
+
+    // Postpone: push today's unfinished items to tomorrow.
+    var undoneToday = day.items.filter(function (it) { return !isDone(t, it.key); });
+    var isLastDay = t === state.plan.days[state.plan.days.length - 1].date;
+    if (undoneToday.length && !isLastDay) {
+      var prow = el('div', 'actions');
+      var post = el('button', 'btn small', 'Move ' + undoneToday.length + ' unfinished to tomorrow');
+      post.title = 'Postpone';
+      post.onclick = function () {
+        var res = L.postponeDay(state.plan, state.days, t);
+        if (res.moved > 0) {
+          state.plan = res.plan;
+          save(state);
+          render();
+        }
+      };
+      prow.appendChild(post);
+      wrap.appendChild(prow);
     }
 
     day.items.forEach(function (item) {
@@ -259,14 +360,33 @@
   }
 
   /* ---------- schedule ---------- */
-  function renderSchedule() {
-    var wrap = document.getElementById('view-schedule');
-    wrap.innerHTML = '';
-    if (!state.plan) { wrap.appendChild(el('p', 'muted', 'No plan yet.')); return; }
-    wrap.appendChild(el('h2', null, 'Full schedule'));
-    state.plan.days.forEach(function (d, i) {
+  var scheduleQuery = '';
+
+  function printSchedule() {
+    if (!state.plan) return;
+    var w = window.open('', '_blank');
+    if (!w) return;
+    var txt = L.exportPlanText(state.plan, state.config);
+    w.document.write('<html><head><title>StudyFlow schedule</title></head><body>' +
+      '<pre style="font-family:monospace;white-space:pre-wrap">' + esc(txt) + '</pre>' +
+      '</body></html>');
+    w.document.close();
+    w.focus();
+    w.print();
+  }
+
+  function drawScheduleList() {
+    var list = document.getElementById('schedule-list');
+    if (!list || !state.plan) return;
+    list.innerHTML = '';
+    var days = L.filterSchedule(state.plan, scheduleQuery);
+    if (!days.length) {
+      list.appendChild(el('p', 'muted', scheduleQuery ? 'No items match "' + scheduleQuery + '".' : 'No plan yet.'));
+      return;
+    }
+    days.forEach(function (d, i) {
       var card = el('div', 'card day');
-      var label = d.date + (i === state.plan.days.length - 1 ? ' — EXAM DAY' : '');
+      var label = d.date + (i === state.plan.days.length - 1 && !scheduleQuery ? ' — EXAM DAY' : '');
       card.appendChild(el('h4', null, label));
       if (!d.items.length) { card.appendChild(el('p', 'muted small', 'Rest day')); }
       d.items.forEach(function (it) {
@@ -274,8 +394,30 @@
           (it.type === 'learn' ? 'Learn · ' : 'Review · ') + it.subject + ' — ' + it.topic + ' (' + it.minutes + 'm)');
         card.appendChild(line);
       });
-      wrap.appendChild(card);
+      list.appendChild(card);
     });
+  }
+
+  function renderSchedule() {
+    var wrap = document.getElementById('view-schedule');
+    wrap.innerHTML = '';
+    if (!state.plan) { wrap.appendChild(el('p', 'muted', 'No plan yet.')); return; }
+    wrap.appendChild(el('h2', null, 'Full schedule'));
+    var bar = el('div', 'actions sched-bar');
+    var search = el('input');
+    search.type = 'search';
+    search.placeholder = 'Search subjects or topics…';
+    search.value = scheduleQuery;
+    search.setAttribute('aria-label', 'Search schedule');
+    search.oninput = function () { scheduleQuery = search.value; drawScheduleList(); };
+    var print = el('button', 'btn small', 'Print / export');
+    print.onclick = printSchedule;
+    bar.appendChild(search); bar.appendChild(print);
+    wrap.appendChild(bar);
+    var list = el('div', null, '');
+    list.id = 'schedule-list';
+    wrap.appendChild(list);
+    drawScheduleList();
   }
 
   /* ---------- progress ---------- */

@@ -29,6 +29,17 @@ grep -qi 'SM-2\|spaced' README.md && ok "README explains algorithm" || bad "READ
 node -e "const L=require('./js/logic.js'); ['generatePlan','updateSchedule','topicReadiness','readinessReport','computeStreak'].forEach(f=>{if(typeof L[f]!=='function')throw new Error('missing '+f)}); console.log('api ok')" \
   && ok "logic.js exports scheduler API" || bad "logic.js API incomplete"
 
+# 5b: logic exports the new productivity API (backlog, postpone, export, timer, filter)
+node -e "const L=require('./js/logic.js'); ['backlogItems','postponeDay','exportPlanText','formatClock','filterSchedule'].forEach(f=>{if(typeof L[f]!=='function')throw new Error('missing '+f)}); console.log('new api ok')" \
+  && ok "logic.js exports backlog/postpone/export/timer/filter API" || bad "logic.js new API incomplete"
+
+# 5c: app.js wires the new UI (timer card, backlog section, postpone, print, schedule search)
+missing=""
+for needle in timerToggle renderTimerCard backlogItems postponeDay printSchedule filterSchedule scheduleQuery; do
+  grep -q "$needle" js/app.js || missing="$missing $needle"
+done
+[ -z "$missing" ] && ok "app.js wires backlog/postpone/print/timer/search UI" || bad "app.js missing wiring:$missing"
+
 # 6: plan covers all topics before the exam (14-day runway, 7 topics)
 node -e "
 const L=require('./js/logic.js');
