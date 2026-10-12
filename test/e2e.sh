@@ -157,5 +157,49 @@ if(L.formatClock(-9)!=='00:00')throw new Error('negative clock not clamped');
 console.log('export/filter/clock ok');
 " && ok "flow9: printable export, schedule search, timer clock" || bad "flow9 failed"
 
+node -e "
+const L=require('./js/logic.js');
+const cfg={examDate:'2026-10-20',dailyMinutes:60,subjects:[{name:'Biology',topics:[{name:'Cells',keyPoints:['Mitochondria','Nucleus']},{name:'Genes',keyPoints:['DNA']}]},{name:'History',topics:[{name:'WWI',keyPoints:[] }]}]};
+const p=L.generatePlan(cfg,'2026-10-12');
+// drillDeck: today's undone items with key points
+const deck=L.drillDeck(p,{},'2026-10-12');
+if(!deck.length)throw new Error('empty deck');
+if(deck.some(c=>!c.keyPoints.length))throw new Error('card without key points');
+if(deck.some(c=>c.topic==='WWI'))throw new Error('WWI has no key points, should be excluded');
+// after marking everything done, deck is empty
+const done={}; done[deck[0].key]=true;
+const recs={'2026-10-12':{done:deck.map(c=>c.key)}};
+if(L.drillDeck(p,recs,'2026-10-12').length!==0)throw new Error('deck should be empty when all done');
+if(L.drillDeck(p,{},'2099-01-01').length!==0)throw new Error('unknown day should be empty');
+console.log('drill deck ok');
+" && ok "flow10: drillDeck picks today's undone key-point cards" || bad "flow10 failed"
+
+node -e "
+const L=require('./js/logic.js');
+const cfg={examDate:'2026-10-20',dailyMinutes:60,subjects:[{name:'Biology',topics:[{name:'Cells',keyPoints:['Mitochondria']},{name:'Genes',keyPoints:['DNA']}]}]};
+const p=L.generatePlan(cfg,'2026-10-12');
+const ics=L.planToICS(p);
+if((ics.match(/BEGIN:VEVENT/g)||[]).length!==p.days.filter(d=>d.items.length).length)throw new Error('event count mismatch');
+if(!ics.startsWith('BEGIN:VCALENDAR'))throw new Error('no header');
+if(/[^\\r]\\n/.test(ics))throw new Error('bare LF found');
+if(!/DTSTART;VALUE=DATE:20261012/.test(ics))throw new Error('no date stamps');
+console.log('ics ok');
+" && ok "flow11: planToICS emits one event per study day with CRLF" || bad "flow11 failed"
+
+node -e "
+const L=require('./js/logic.js');
+const cfg={examDate:'2026-10-20',dailyMinutes:60,subjects:[{name:'Biology',topics:[{name:'Cells',keyPoints:['M'] }]}]};
+const p=L.generatePlan(cfg,'2026-10-12');
+const state={config:cfg,plan:p,topics:{},days:{}};
+const back=L.serializeState(state);
+const imp=L.parseStateImport(back);
+if(imp.plan.days.length!==p.days.length)throw new Error('round-trip lost days');
+if(imp.config.subjects[0].topics[0].name!=='Cells')throw new Error('round-trip lost topics');
+for(const bad of ['not json','[]','{}','{\"config\":{}}']){try{L.parseStateImport(bad);throw new Error('accepted '+bad);}catch(e){if(/accepted/.test(e.message))throw e;}}
+const bare=L.parseStateImport(JSON.stringify({config:cfg,plan:p}));
+if(!bare.topics||!bare.days)throw new Error('maps not defaulted');
+console.log('backup ok');
+" && ok "flow12: backup serialize/import round-trips and rejects junk" || bad "flow12 failed"
+
 echo "== $PASS passed, $FAIL failed =="
 [ "$FAIL" -eq 0 ]

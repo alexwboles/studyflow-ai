@@ -301,7 +301,86 @@
     return lines.join('\n');
   }
 
-  /** mm:ss clock rendering for the focus timer. */
+  /**
+   * Build a self-test drill deck from one plan day: one card per undone
+   * queue item that has key points to quiz on.
+   * Returns [{key, id, subject, topic, keyPoints, type, minutes}].
+   */
+  function drillDeck(plan, dayRecords, dateStr) {
+    var day = null;
+    (plan.days || []).forEach(function (d) { if (d.date === dateStr) day = d; });
+    if (!day) return [];
+    var rec = (dayRecords || {})[dateStr] || { done: [] };
+    return day.items.filter(function (it) {
+      return rec.done.indexOf(it.key) === -1 && (it.keyPoints || []).length;
+    }).map(function (it) {
+      return {
+        key: it.key, id: it.id, subject: it.subject, topic: it.topic,
+        keyPoints: it.keyPoints.slice(), type: it.type, minutes: it.minutes
+      };
+    });
+  }
+
+  /**
+   * Render the whole plan as an .ics calendar file: one all-day event per
+   * study day (CRLF line endings). Exam day is flagged in the summary.
+   */
+  function planToICS(plan) {
+    function escICS(s) {
+      return String(s == null ? '' : s)
+        .replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,')
+        .replace(/\r?\n/g, '\\n');
+    }
+    var lines = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//StudyFlow AI//Study Plan//EN'
+    ];
+    var days = (plan && plan.days) || [];
+    days.forEach(function (d, i) {
+      if (!d.items || !d.items.length) return;
+      var mins = d.items.reduce(function (a, it) { return a + (it.minutes || 0); }, 0);
+      var stamp = String(d.date).replace(/-/g, '');
+      lines.push('BEGIN:VEVENT');
+      lines.push('UID:studyflow-' + stamp + '@local');
+      lines.push('DTSTAMP:' + stamp + 'T000000');
+      lines.push('DTSTART;VALUE=DATE:' + stamp);
+      lines.push('SUMMARY:' + escICS('Study: ' + d.items.length + ' items (' + mins + ' min)' +
+        (i === days.length - 1 ? ' — EXAM DAY' : '')));
+      lines.push('DESCRIPTION:' + escICS(d.items.map(function (it) {
+        return (it.type === 'learn' ? 'LEARN' : 'REVIEW') + ': ' + it.subject + ' — ' + it.topic;
+      }).join('\n')));
+      lines.push('END:VEVENT');
+    });
+    lines.push('END:VCALENDAR');
+    return lines.join('\r\n') + '\r\n';
+  }
+
+  /** Serialize full app state for backup. */
+  function serializeState(state) {
+    return JSON.stringify(state, null, 2);
+  }
+
+  /**
+   * Validate + normalize an imported backup object. Throws on bad input.
+   * Returns the state (with days/topics maps guaranteed present).
+   */
+  function parseStateImport(text) {
+    var s;
+    try { s = JSON.parse(text); } catch (e) { throw new Error('Not valid JSON.'); }
+    if (!s || typeof s !== 'object' || Array.isArray(s)) {
+      throw new Error('Import must be a StudyFlow backup object.');
+    }
+    if (!s.config || !Array.isArray(s.config.subjects) || !s.config.subjects.length) {
+      throw new Error('Backup has no subjects.');
+    }
+    if (!s.plan || !Array.isArray(s.plan.days)) {
+      throw new Error('Backup has no plan.');
+    }
+    s.topics = s.topics || {};
+    s.days = s.days || {};
+    return s;
+  }
   function formatClock(totalSeconds) {
     var s = Math.max(0, Math.floor(totalSeconds));
     var m = Math.floor(s / 60);
@@ -347,6 +426,10 @@
     postponeDay: postponeDay,
     exportPlanText: exportPlanText,
     formatClock: formatClock,
-    filterSchedule: filterSchedule
+    filterSchedule: filterSchedule,
+    drillDeck: drillDeck,
+    planToICS: planToICS,
+    serializeState: serializeState,
+    parseStateImport: parseStateImport
   };
 });

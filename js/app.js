@@ -5,8 +5,7 @@
   var LS_KEY = 'studyflow.v1';
   var LS_AIKEY = 'studyflow.openai_key';
 
-  function el(tag, cls, text) {
-    var e = document.createElement(tag);
+  function el(tag, cls, text) {    var e = document.createElement(tag);
     if (cls) e.className = cls;
     if (text != null) e.textContent = text;
     return e;
@@ -74,6 +73,16 @@
     try { return JSON.parse(localStorage.getItem(LS_KEY)) || null; } catch (e) { return null; }
   }
   function save(s) { localStorage.setItem(LS_KEY, JSON.stringify(s)); }
+
+  function downloadText(filename, text, mime) {
+    var blob = new Blob([text], { type: mime || 'text/plain;charset=utf-8' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
 
   var state = load() || { config: null, plan: null, topics: {}, days: {} };
 
@@ -264,6 +273,33 @@
       renderSetup();
     };
     actions.appendChild(gen); actions.appendChild(demo);
+    var exp = el('button', 'btn', 'Export backup (.json)');
+    exp.onclick = function () {
+      if (!state.plan) { alert('Nothing to export yet — generate a plan first.'); return; }
+      downloadText('studyflow-backup.json', L.serializeState(state), 'application/json');
+    };
+    var imp = el('button', 'btn', 'Import backup');
+    var impFile = document.createElement('input');
+    impFile.type = 'file'; impFile.accept = 'application/json'; impFile.style.display = 'none';
+    impFile.onchange = function () {
+      var f = impFile.files && impFile.files[0];
+      impFile.value = '';
+      if (!f) return;
+      var r = new FileReader();
+      r.onload = function () {
+        try {
+          state = L.parseStateImport(String(r.result));
+          save(state);
+          renderSetup();
+          alert('Backup imported: ' + state.plan.days.length + ' plan days restored.');
+        } catch (e) {
+          alert('Import failed: ' + e.message);
+        }
+      };
+      r.readAsText(f);
+    };
+    imp.onclick = function () { impFile.click(); };
+    actions.appendChild(exp); actions.appendChild(imp); actions.appendChild(impFile);
     wrap.appendChild(actions);
     wrap.appendChild(el('div', null, '')).id = 'setup-warnings';
   }
@@ -412,7 +448,13 @@
     search.oninput = function () { scheduleQuery = search.value; drawScheduleList(); };
     var print = el('button', 'btn small', 'Print / export');
     print.onclick = printSchedule;
-    bar.appendChild(search); bar.appendChild(print);
+    var ics = el('button', 'btn small', 'Download .ics');
+    ics.title = 'Add the whole study schedule to your calendar';
+    ics.onclick = function () {
+      if (!state.plan) return;
+      downloadText('studyflow-schedule.ics', L.planToICS(state.plan), 'text/calendar;charset=utf-8');
+    };
+    bar.appendChild(search); bar.appendChild(print); bar.appendChild(ics);
     wrap.appendChild(bar);
     var list = el('div', null, '');
     list.id = 'schedule-list';
@@ -464,11 +506,71 @@
   }
 
   /* ---------- flashcards ---------- */
+  /* ---------- flashcards ---------- */
+  var drill = null; // {cards, idx, date} — active self-test drill session
+
+  function renderDrill(wrap) {
+    if (!drill || drill.idx >= drill.cards.length) {
+      drill = null;
+      renderCards();
+      return;
+    }
+    var card = drill.cards[drill.idx];
+    wrap.appendChild(el('h2', null, 'Self-test drill'));
+    wrap.appendChild(el('p', 'muted', 'Card ' + (drill.idx + 1) + ' of ' + drill.cards.length +
+      ' — recall first, then flip.'));
+    var box = el('div', 'card flash drill-card');
+    box.appendChild(el('div', 'badge ' + card.type, card.type === 'learn' ? 'LEARN' : 'REVIEW'));
+    box.appendChild(el('h3', null, card.subject + ' — ' + card.topic));
+    var back = el('ul', 'kp hidden');
+    card.keyPoints.forEach(function (k) { back.appendChild(el('li', null, k)); });
+    box.appendChild(back);
+    var flip = el('button', 'btn primary', 'Flip — show key points');
+    flip.onclick = function () {
+      back.classList.remove('hidden');
+      flip.disabled = true;
+      flip.textContent = 'How well did you recall it?';
+      var row = el('div', 'actions');
+      [['again', 'Again'], ['hard', 'Hard'], ['good', 'Good'], ['easy', 'Easy']].forEach(function (r) {
+        var b = el('button', 'btn small' + (r[0] === 'good' ? ' primary' : ''), r[1]);
+        b.onclick = function () {
+          rateReview(drill.date, { id: card.id, key: card.key, type: card.type }, r[0]);
+          drill.idx++;
+          renderCards(); // routes back to renderDrill while the drill is active
+        };
+        row.appendChild(b);
+      });
+      box.appendChild(row);
+    };
+    box.appendChild(flip);
+    wrap.appendChild(box);
+    var end = el('button', 'btn small', 'End drill');
+    end.onclick = function () { drill = null; renderCards(); };
+    wrap.appendChild(end);
+  }
+
   function renderCards() {
     var wrap = document.getElementById('view-cards');
     wrap.innerHTML = '';
+    if (drill) { renderDrill(wrap); return; }
     if (!state.config) { wrap.appendChild(el('p', 'muted', 'No subjects yet.')); return; }
     wrap.appendChild(el('h2', null, 'Flashcards'));
+
+    // Self-test drill: one card at a time from today's undone queue items,
+    // rated Again/Hard/Good/Easy so the SM-2 scheduler adapts.
+    var t = todayISO();
+    var deck = state.plan ? L.drillDeck(state.plan, state.days, t) : [];
+    if (deck.length) {
+      var cta = el('div', 'card drill-cta');
+      cta.appendChild(el('p', null, 'Self-test drill: ' + deck.length +
+        ' cards from today\'s queue. Flip each one, then rate your recall — ratings feed the spaced-repetition scheduler.'));
+      var start = el('button', 'btn primary', 'Start drill');
+      start.onclick = function () { drill = { cards: deck, idx: 0, date: t }; renderDrill(wrap); };
+      cta.appendChild(start);
+      wrap.appendChild(cta);
+    } else if (state.plan) {
+      wrap.appendChild(el('p', 'muted', 'No drill cards right now — today\'s queue items with key points are all done.'));
+    }
     state.config.subjects.forEach(function (s) {
       wrap.appendChild(el('h3', null, s.name));
       s.topics.forEach(function (t) {

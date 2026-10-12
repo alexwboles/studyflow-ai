@@ -67,5 +67,19 @@ if(learns!==0)throw new Error(learns+' learn items in taper');
 console.log('taper ok');
 " && ok "taper: final 2 days are reviews-only" || bad "taper violated"
 
+node -e "
+const L=require('./js/logic.js');
+if(typeof L.drillDeck!=='function')throw new Error('drillDeck missing');
+if(typeof L.planToICS!=='function')throw new Error('planToICS missing');
+if(typeof L.serializeState!=='function')throw new Error('serializeState missing');
+if(typeof L.parseStateImport!=='function')throw new Error('parseStateImport missing');
+console.log('new logic API ok');
+" && ok "new logic API exported (drillDeck/planToICS/serializeState/parseStateImport)" || bad "new logic API missing"
+
+grep -q 'renderDrill' js/app.js && ok "app.js has drill mode" || bad "app.js missing drill mode"
+grep -q 'planToICS' js/app.js && ok "app.js wires ICS download" || bad "app.js missing ICS wiring"
+grep -q 'parseStateImport' js/app.js && ok "app.js wires backup import" || bad "app.js missing import wiring"
+grep -q 'Export backup' js/app.js && ok "app.js has backup export button" || bad "app.js missing export button"
+
 echo "== $PASS passed, $FAIL failed =="
 [ "$FAIL" -eq 0 ]

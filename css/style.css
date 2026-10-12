@@ -180,3 +180,10 @@ footer { padding: 10px 0 34px; text-align: center; }
   .topic-row .btn { justify-self: start; }
   #tabs button { padding: 8px 14px; font-size: 13px; }
 }
+
+/* ---------- self-test drill ---------- */
+.drill-cta { border-left: 4px solid var(--accent, #b45309); }
+.drill-card { max-width: 560px; }
+.drill-card h3 { margin: 10px 0 6px; }
+.drill-card .kp { margin: 10px 0; }
+.drill-card .actions { margin-top: 12px; }

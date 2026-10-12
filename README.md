@@ -16,7 +16,10 @@ Students and certification-takers cram the night before and forget everything a 
 2. **Smart plan** — topics are interleaved across subjects and spread over your runway; reviews auto-schedule at 1 / 3 / 7 / 14-day gaps. The last 2 days taper to reviews only — no new material right before the exam.
 3. **Daily queue** — each day shows exactly what to learn and what to review.
 4. **Adaptive recall** — after each review, rate yourself: *Again / Hard / Good / Easy*. Forgetting something sends it back to tomorrow; nailing it stretches the gap further.
-5. **Readiness tracking** — per-subject readiness %, overall readiness, and a daily streak.
+5. **Self-test drill** — one card at a time from today's queue: recall, flip, rate — ratings feed the spaced-repetition scheduler
+6. **Readiness tracking** — per-subject readiness %, overall readiness, and a daily streak.
+7. **Calendar export** — the whole study schedule downloads as `.ics`
+8. **Backup** — export/import your full plan and progress as JSON (device migration, safekeeping)
 
 Everything runs **100% locally in your browser** (localStorage). No account, no server, no data leaving your device. An optional OpenAI key (Settings → Setup tab) powers "✨ Explain with AI" buttons on flashcards — never required.
 
