@@ -131,6 +131,7 @@
     tp.nextReview = res.nextReview;
     tp.reviewsDone = (tp.reviewsDone || 0) + 1;
     tp.lastRating = rating;
+    if (rating === 'again') tp.againCount = (tp.againCount || 0) + 1;
     markDone(dateStr, item.key, item);
   }
 
@@ -485,6 +486,47 @@
       c.appendChild(bar(p.readiness));
       wrap.appendChild(c);
     });
+
+    // readiness forecast: projected completion by exam day at current pace
+    var fc = L.forecastReadiness(state.topics, counts, state.days, state.config.examDate, todayISO());
+    var fcard = el('div', 'card');
+    fcard.appendChild(el('h3', null, 'Forecast — ' + fc.verdict));
+    fcard.appendChild(el('p', 'muted small',
+      'At your current pace (' + fc.pacePerDay + ' reviews/day) you project ' +
+      Math.round(fc.projectedPct * 100) + '% review completion by exam day — ' +
+      fc.reviewsDone + ' of ' + fc.totalReviews + ' reviews done, ' + fc.daysLeft + ' days left.'));
+    wrap.appendChild(fcard);
+
+    // weak spots: lowest-readiness topics first
+    var weak = L.weakSpots(state.topics, counts, state.config.subjects, 5);
+    if (weak.length) {
+      var wcard = el('div', 'card');
+      wcard.appendChild(el('h3', null, 'Weak spots — drill these first'));
+      weak.forEach(function (w) {
+        wcard.appendChild(el('p', 'small',
+          w.subject + ' — ' + w.topic + ': ' + Math.round(w.readiness * 100) + '% ready' +
+          (w.againCount ? ' · forgotten ' + w.againCount + '×' : '') +
+          ' · ease ' + w.ef.toFixed(1)));
+      });
+      wrap.appendChild(wcard);
+    }
+
+    // 8-week activity heatmap
+    var hcard = el('div', 'card');
+    hcard.appendChild(el('h3', null, 'Activity — last 8 weeks'));
+    var grid = el('div', 'heat-grid');
+    L.studyWeeks(dayDoneCounts(), todayISO()).forEach(function (wk) {
+      var col = el('div', 'heat-col');
+      wk.days.forEach(function (d) {
+        var cell = el('div', 'heat-cell heat-' + d.level);
+        cell.title = d.date + ': ' + d.done + '/' + d.total + ' done';
+        col.appendChild(cell);
+      });
+      grid.appendChild(col);
+    });
+    hcard.appendChild(grid);
+    hcard.appendChild(el('p', 'muted small', 'Each column is one week (Mon–Sun); darker green means more of the day finished.'));
+    wrap.appendChild(hcard);
   }
 
   function dayDoneCounts() {

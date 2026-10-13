@@ -40,6 +40,15 @@ for needle in timerToggle renderTimerCard backlogItems postponeDay printSchedule
 done
 [ -z "$missing" ] && ok "app.js wires backlog/postpone/print/timer/search UI" || bad "app.js missing wiring:$missing"
 
+# 5d: logic exports the sweep API (weak spots, forecast, heatmap); app wires it
+node -e "const L=require('./js/logic.js'); ['weakSpots','forecastReadiness','studyWeeks'].forEach(f=>{if(typeof L[f]!=='function')throw new Error('missing '+f)}); console.log('sweep api ok')" \
+  && ok "logic.js exports weakSpots/forecastReadiness/studyWeeks" || bad "logic.js sweep API incomplete"
+missing=""
+for needle in weakSpots forecastReadiness studyWeeks heat-grid againCount; do
+  grep -q "$needle" js/app.js || grep -q "$needle" css/style.css || missing="$missing $needle"
+done
+[ -z "$missing" ] && ok "app.js + css wire weak spots/forecast/heatmap" || bad "sweep UI missing:$missing"
+
 # 6: plan covers all topics before the exam (14-day runway, 7 topics)
 node -e "
 const L=require('./js/logic.js');

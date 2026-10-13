@@ -18,8 +18,11 @@ Students and certification-takers cram the night before and forget everything a 
 4. **Adaptive recall** — after each review, rate yourself: *Again / Hard / Good / Easy*. Forgetting something sends it back to tomorrow; nailing it stretches the gap further.
 5. **Self-test drill** — one card at a time from today's queue: recall, flip, rate — ratings feed the spaced-repetition scheduler
 6. **Readiness tracking** — per-subject readiness %, overall readiness, and a daily streak.
+7. **Readiness forecast** — projects your review-completion % by exam day from your last-7-days pace, with an on-track / tight / behind-pace verdict
+8. **Weak spots** — topics ranked worst-first by readiness (with "forgotten N×" counts and easiness factor) so you know what to drill
 7. **Calendar export** — the whole study schedule downloads as `.ics`
 8. **Backup** — export/import your full plan and progress as JSON (device migration, safekeeping)
+9. **Activity heatmap** — 8-week Mon–Sun grid of study days on the Progress tab; darker green means more of the day finished
 
 Everything runs **100% locally in your browser** (localStorage). No account, no server, no data leaving your device. An optional OpenAI key (Settings → Setup tab) powers "✨ Explain with AI" buttons on flashcards — never required.
 

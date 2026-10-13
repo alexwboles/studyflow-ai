@@ -282,6 +282,102 @@
   }
 
   /**
+   * Weak-spot report: learned topics ranked worst-first by readiness
+   * (ties: most "again" ratings, then lowest easiness factor).
+   * topicStates: { 'si:ti': {learned, reviewsDone, ef, againCount} }
+   * Returns [{id, subject, topic, readiness, ef, againCount}] (limit 5).
+   */
+  function weakSpots(topicStates, scheduledCounts, subjects, limit) {
+    var out = [];
+    Object.keys(topicStates || {}).forEach(function (tid) {
+      var parts = String(tid).split(':');
+      var si = Number(parts[0]), ti = Number(parts[1]);
+      var subj = (subjects || [])[si];
+      var topic = subj && (subj.topics || [])[ti];
+      if (!topic) return;
+      var tp = topicStates[tid];
+      out.push({
+        id: tid,
+        subject: subj.name,
+        topic: topic.name,
+        readiness: topicReadiness(tp, scheduledCounts[tid] || 0),
+        ef: tp.ef != null ? tp.ef : 2.5,
+        againCount: tp.againCount || 0
+      });
+    });
+    out.sort(function (a, b) {
+      return (a.readiness - b.readiness) ||
+        (b.againCount - a.againCount) ||
+        (a.ef - b.ef);
+    });
+    return out.slice(0, limit || 5);
+  }
+
+  /**
+   * Readiness forecast: project review completion by the exam date from the
+   * last-7-days review pace. dayRecords: { 'YYYY-MM-DD': {done:[keys]} }.
+   * Returns {totalReviews, reviewsDone, pacePerDay, daysLeft, projectedPct, verdict}.
+   */
+  function forecastReadiness(topicStates, scheduledCounts, dayRecords, examDate, today) {
+    today = today || todayStr();
+    var total = 0, done = 0;
+    Object.keys(scheduledCounts || {}).forEach(function (tid) {
+      var n = scheduledCounts[tid] || 0;
+      total += n;
+      var tp = (topicStates || {})[tid];
+      done += Math.min(tp ? (tp.reviewsDone || 0) : 0, n);
+    });
+    var recent = 0;
+    for (var d = 0; d < 7; d++) {
+      var rec = (dayRecords || {})[addDaysStr(today, -d)];
+      if (rec && rec.done) {
+        recent += rec.done.filter(function (k) { return String(k).indexOf(':review:') !== -1; }).length;
+      }
+    }
+    var pace = recent / 7;
+    var daysLeft = Math.max(0, daysBetween(today, examDate));
+    var projected = Math.min(total, done + pace * daysLeft);
+    var pct = total ? projected / total : 1;
+    return {
+      totalReviews: total,
+      reviewsDone: done,
+      pacePerDay: Math.round(pace * 10) / 10,
+      daysLeft: daysLeft,
+      projectedPct: pct,
+      verdict: pct >= 0.95 ? 'on track' : pct >= 0.75 ? 'tight' : 'behind pace'
+    };
+  }
+
+  /**
+   * Last 8 weeks (Monday-start) of study activity for a heatmap.
+   * dayCounts: { 'YYYY-MM-DD': {done, total} }.
+   * Returns [{start, days:[{date, done, total, level}]}]; level 0..3.
+   */
+  function studyWeeks(dayCounts, today) {
+    today = today || todayStr();
+    var end = parseDay(today);
+    var mondayOffset = (end.getUTCDay() + 6) % 7;
+    var thisMonday = addDaysStr(toISO(end), -mondayOffset);
+    var weeks = [];
+    for (var w = 7; w >= 0; w--) {
+      var start = addDaysStr(thisMonday, -7 * w);
+      var days = [];
+      for (var d = 0; d < 7; d++) {
+        var ds = addDaysStr(start, d);
+        var rec = (dayCounts || {})[ds] || { done: 0, total: 0 };
+        var frac = rec.total > 0 ? rec.done / rec.total : 0;
+        days.push({
+          date: ds,
+          done: rec.done,
+          total: rec.total,
+          level: rec.total > 0 && frac >= 1 ? 3 : frac >= 0.5 ? 2 : frac > 0 ? 1 : 0
+        });
+      }
+      weeks.push({ start: start, days: days });
+    }
+    return weeks;
+  }
+  /**
    * Plain-text printable rendering of the full schedule.
    * config: optional { subjects } — unused for now, kept for future headers.
    */
@@ -422,6 +518,9 @@
     topicReadiness: topicReadiness,
     readinessReport: readinessReport,
     computeStreak: computeStreak,
+    weakSpots: weakSpots,
+    forecastReadiness: forecastReadiness,
+    studyWeeks: studyWeeks,
     backlogItems: backlogItems,
     postponeDay: postponeDay,
     exportPlanText: exportPlanText,

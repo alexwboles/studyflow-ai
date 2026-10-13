@@ -201,5 +201,61 @@ if(!bare.topics||!bare.days)throw new Error('maps not defaulted');
 console.log('backup ok');
 " && ok "flow12: backup serialize/import round-trips and rejects junk" || bad "flow12 failed"
 
+# Flow 13: weakSpots ranks worst-first (low readiness, most agains, low EF)
+node -e "
+const L=require('./js/logic.js');
+const subjects=[{name:'Bio',topics:[{name:'Cells'},{name:'Genetics'}]},{name:'Hist',topics:[{name:'WWI'}]}];
+const states={'0:0':{learned:true,reviewsDone:4,ef:2.5,againCount:0},'0:1':{learned:true,reviewsDone:1,ef:1.8,againCount:3},'1:0':{learned:false,reviewsDone:0,ef:2.5,againCount:0}};
+const counts={'0:0':4,'0:1':4,'1:0':2};
+const weak=L.weakSpots(states,counts,subjects,5);
+if(weak.length!==3)throw new Error('want 3, got '+weak.length);
+if(weak[0].topic!=='WWI')throw new Error('unlearned topic should rank worst, got '+weak[0].topic);
+if(weak[1].topic!=='Genetics')throw new Error('low-readiness second, got '+weak[1].topic);
+if(weak[1].againCount!==3)throw new Error('againCount lost');
+console.log('weakest: '+weak.map(w=>w.topic).join(', '));
+" && ok "flow13: weakSpots ranks worst-first with again counts" || bad "flow13 failed"
+
+# Flow 14: forecastReadiness projects pace and verdict
+node -e "
+const L=require('./js/logic.js');
+const t=L.todayStr(), exam=L.addDaysStr(t,10);
+const counts={'0:0':4,'0:1':4};
+const states={'0:0':{learned:true,reviewsDone:2,ef:2.5},'0:1':{learned:true,reviewsDone:0,ef:2.5}};
+// 2 reviews/day for the last 7 days -> 20 projected + 2 done = 22 > 8 total -> on track
+const days={};
+for(let d=0;d<7;d++){days[L.addDaysStr(t,-d)]={done:['0:0:review:1','0:1:review:2']};}
+const f=L.forecastReadiness(states,counts,days,exam,t);
+if(f.totalReviews!==8)throw new Error('total='+f.totalReviews);
+if(f.reviewsDone!==2)throw new Error('done='+f.reviewsDone);
+if(f.pacePerDay!==2)throw new Error('pace='+f.pacePerDay);
+if(f.verdict!=='on track')throw new Error('verdict='+f.verdict+' want on track');
+const idle=L.forecastReadiness(states,counts,{},exam,t);
+if(idle.verdict!=='behind pace')throw new Error('idle verdict='+idle.verdict+' want behind pace');
+console.log('forecast: '+f.verdict+' / idle: '+idle.verdict);
+" && ok "flow14: forecastReadiness projects pace with on-track/behind verdicts" || bad "flow14 failed"
+
+# Flow 15: studyWeeks builds 8 Monday-start weeks with 0..3 levels
+node -e "
+const L=require('./js/logic.js');
+const t=L.todayStr();
+const counts={}; counts[t]={done:2,total:2};
+const weeks=L.studyWeeks(counts,t);
+if(weeks.length!==8)throw new Error('want 8 weeks, got '+weeks.length);
+weeks.forEach(w=>{if(w.days.length!==7)throw new Error('week not 7 days');});
+const firstDay=weeks[0].days[0];
+const dow=new Date(firstDay.date+'T00:00:00Z').getUTCDay();
+if(dow!==1)throw new Error('weeks should start Monday, got dow='+dow);
+// today lives in the last (current) week column — its cell should be level 3
+const curWeek=weeks[7];
+const todayCell=curWeek.days.find(d=>d.date===t);
+if(!todayCell)throw new Error('today not in current week column');
+if(todayCell.level!==3)throw new Error('full day should be level 3, got '+todayCell.level);
+const half=L.studyWeeks({[t]:{done:1,total:2}},t)[7].days.find(d=>d.date===t);
+if(half.level!==2)throw new Error('half day should be level 2, got '+half.level);
+const idle=L.studyWeeks({},t)[0].days[0];
+if(idle.level!==0)throw new Error('empty day should be level 0, got '+idle.level);
+console.log('heatmap ok');
+" && ok "flow15: studyWeeks builds 8 Monday-start weeks with levels" || bad "flow15 failed"
+
 echo "== $PASS passed, $FAIL failed =="
 [ "$FAIL" -eq 0 ]

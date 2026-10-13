@@ -187,3 +187,11 @@ footer { padding: 10px 0 34px; text-align: center; }
 .drill-card h3 { margin: 10px 0 6px; }
 .drill-card .kp { margin: 10px 0; }
 .drill-card .actions { margin-top: 12px; }
+
+/* ---------- 8-week activity heatmap (square cells, no rounded edges) ---------- */
+.heat-grid { display: flex; gap: 4px; margin: 10px 0 6px; }
+.heat-col { display: flex; flex-direction: column; gap: 4px; }
+.heat-cell { width: 15px; height: 15px; background: #e8ece7; }
+.heat-cell.heat-1 { background: #cfe6d4; }
+.heat-cell.heat-2 { background: #93c9a1; }
+.heat-cell.heat-3 { background: #2f7d4f; }
