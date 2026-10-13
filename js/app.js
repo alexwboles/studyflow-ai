@@ -246,6 +246,7 @@
       state.topics = {};
       state.days = {};
       save(state);
+      updateHeaderStats();
       plan.warnings.forEach(function (w) { warnBox.appendChild(el('p', 'warn', w)); });
       warnBox.appendChild(el('p', 'ok', 'Plan ready: ' + plan.topicCount + ' topics over ' + plan.days.length + ' days. See the Today tab.'));
     };
@@ -305,7 +306,23 @@
     wrap.appendChild(el('div', null, '')).id = 'setup-warnings';
   }
 
-  /* ---------- today ---------- */
+  /* ---------- today: deck dashboard ---------- */
+  function dueCountsFor(dateStr) {
+    var counts = { learn: 0, review: 0, bySubject: {} };
+    if (!state.plan) return counts;
+    state.plan.days.forEach(function (d) {
+      if (d.date !== dateStr) return;
+      d.items.forEach(function (it) {
+        if (isDone(dateStr, it.key)) return;
+        if (it.type === 'learn') counts.learn++;
+        else counts.review++;
+        var s = counts.bySubject[it.subject] || (counts.bySubject[it.subject] = { learn: 0, review: 0 });
+        if (it.type === 'learn') s.learn++; else s.review++;
+      });
+    });
+    return counts;
+  }
+
   function renderToday() {
     var wrap = document.getElementById('view-today');
     wrap.innerHTML = '';
@@ -317,6 +334,54 @@
     var examIn = L.daysBetween(t, state.config.examDate);
     wrap.appendChild(el('h2', null, 'Today — ' + t));
     wrap.appendChild(el('p', 'muted', examIn === 0 ? 'Exam day. You\'ve got this.' : examIn + ' day' + (examIn === 1 ? '' : 's') + ' until the exam.'));
+
+    // Due-today hero (Anki due-count language)
+    var due = dueCountsFor(t);
+    var hero = el('div', 'card due-hero');
+    var heroTop = el('div', 'due-top');
+    heroTop.appendChild(el('div', 'due-label', 'Due today'));
+    heroTop.appendChild(el('div', 'due-num', String(due.learn + due.review)));
+    hero.appendChild(heroTop);
+    var chips = el('div', 'due-chips');
+    chips.appendChild(el('span', 'due-chip new', due.learn + ' new'));
+    chips.appendChild(el('span', 'due-chip review', due.review + ' to review'));
+    hero.appendChild(chips);
+    var deck = L.drillDeck(state.plan, state.days, t);
+    if (deck.length) {
+      var study = el('button', 'btn primary big', 'Study now — ' + deck.length + ' cards');
+      study.onclick = function () { startReview(deck, "Today's queue"); };
+      hero.appendChild(study);
+      hero.appendChild(el('p', 'muted small', 'Flip each card, then rate your recall. The scheduler sets the next review.'));
+    } else {
+      hero.appendChild(el('p', 'muted', due.learn + due.review === 0
+        ? 'All clear. Rest or get ahead.'
+        : 'No drill cards with key points — work through the plan below.'));
+    }
+    wrap.appendChild(hero);
+
+    // Deck cards per subject
+    var decks = el('div', 'deck-grid');
+    (state.config.subjects || []).forEach(function (s, si) {
+      var c = due.bySubject[s.name] || { learn: 0, review: 0 };
+      var card = el('button', 'deck-card');
+      card.appendChild(el('div', 'deck-name', s.name));
+      var dc = el('div', 'due-chips small');
+      dc.appendChild(el('span', 'due-chip new', c.learn + ' new'));
+      dc.appendChild(el('span', 'due-chip review', c.review + ' due'));
+      card.appendChild(dc);
+      var learnedN = s.topics.filter(function (_, ti) {
+        var tp = state.topics[si + ':' + ti];
+        return tp && tp.learned;
+      }).length;
+      card.appendChild(el('div', 'deck-meta muted small',
+        learnedN + ' of ' + s.topics.length + ' topics learned'));
+      card.onclick = function () { showTab('cards'); };
+      decks.appendChild(card);
+    });
+    if ((state.config.subjects || []).length) {
+      wrap.appendChild(el('h3', null, 'Decks'));
+      wrap.appendChild(decks);
+    }
 
     renderTimerCard(wrap);
 
@@ -366,8 +431,8 @@
       wrap.appendChild(prow);
     }
 
-    day.items.forEach(function (item) {
-      var card = el('div', 'card item ' + item.type + (isDone(t, item.key) ? ' done' : ''));
+    wrap.appendChild(el('h3', null, "Today's plan"));
+    day.items.forEach(function (item) {      var card = el('div', 'card item ' + item.type + (isDone(t, item.key) ? ' done' : ''));
       var title = el('div', 'item-title');
       title.appendChild(el('span', 'badge ' + item.type, item.type === 'learn' ? 'LEARN' : 'REVIEW'));
       title.appendChild(el('strong', null, ' ' + item.subject + ' — ' + item.topic));
@@ -547,54 +612,133 @@
     return outer;
   }
 
-  /* ---------- flashcards ---------- */
-  /* ---------- flashcards ---------- */
-  var drill = null; // {cards, idx, date} — active self-test drill session
+  /* ---------- review room (Anki pattern: flip, then Again/Hard/Good/Easy) ---------- */
+  var review = null; // {cards, idx, date, startedAt, ratings, deck}
 
-  function renderDrill(wrap) {
-    if (!drill || drill.idx >= drill.cards.length) {
-      drill = null;
-      renderCards();
-      return;
-    }
-    var card = drill.cards[drill.idx];
-    wrap.appendChild(el('h2', null, 'Self-test drill'));
-    wrap.appendChild(el('p', 'muted', 'Card ' + (drill.idx + 1) + ' of ' + drill.cards.length +
-      ' — recall first, then flip.'));
-    var box = el('div', 'card flash drill-card');
-    box.appendChild(el('div', 'badge ' + card.type, card.type === 'learn' ? 'LEARN' : 'REVIEW'));
-    box.appendChild(el('h3', null, card.subject + ' — ' + card.topic));
-    var back = el('ul', 'kp hidden');
-    card.keyPoints.forEach(function (k) { back.appendChild(el('li', null, k)); });
-    box.appendChild(back);
-    var flip = el('button', 'btn primary', 'Flip — show key points');
-    flip.onclick = function () {
-      back.classList.remove('hidden');
-      flip.disabled = true;
-      flip.textContent = 'How well did you recall it?';
-      var row = el('div', 'actions');
-      [['again', 'Again'], ['hard', 'Hard'], ['good', 'Good'], ['easy', 'Easy']].forEach(function (r) {
-        var b = el('button', 'btn small' + (r[0] === 'good' ? ' primary' : ''), r[1]);
-        b.onclick = function () {
-          rateReview(drill.date, { id: card.id, key: card.key, type: card.type }, r[0]);
-          drill.idx++;
-          renderCards(); // routes back to renderDrill while the drill is active
-        };
-        row.appendChild(b);
-      });
-      box.appendChild(row);
+  function intervalLabel(days) {
+    if (days <= 1) return '1d';
+    if (days < 30) return days + 'd';
+    return Math.round(days / 30) + 'mo';
+  }
+
+  function previewInterval(card, rating) {
+    var tp = state.topics[card.id] || { ef: 2.5, interval: 1 };
+    try {
+      var res = L.updateSchedule({ ef: tp.ef, interval: tp.interval }, rating,
+        review.date, state.config.examDate);
+      return intervalLabel(res.interval);
+    } catch (e) { return '—'; }
+  }
+
+  function startReview(cards, deckName) {
+    if (!cards || !cards.length) return;
+    review = {
+      cards: cards.slice(), idx: 0, date: todayISO(), startedAt: Date.now(),
+      ratings: { again: 0, hard: 0, good: 0, easy: 0 }, deck: deckName || "Today's queue"
     };
-    box.appendChild(flip);
-    wrap.appendChild(box);
-    var end = el('button', 'btn small', 'End drill');
-    end.onclick = function () { drill = null; renderCards(); };
-    wrap.appendChild(end);
+    document.getElementById('sessionSummary').hidden = true;
+    document.getElementById('reviewRoom').hidden = false;
+    document.body.classList.add('reviewing');
+    renderReviewCard();
+  }
+
+  function renderReviewCard() {
+    var card = review.cards[review.idx];
+    document.getElementById('rrDeck').textContent = review.deck;
+    document.getElementById('rrProgress').textContent =
+      'Card ' + (review.idx + 1) + ' of ' + review.cards.length;
+    var badge = document.getElementById('rrBadge');
+    badge.textContent = card.type === 'learn' ? 'LEARN' : 'REVIEW';
+    badge.className = 'rr-badge ' + card.type;
+    document.getElementById('rrTopic').textContent = card.topic;
+    document.getElementById('rrSubject').textContent = card.subject;
+    var ans = document.getElementById('rrAnswer');
+    ans.innerHTML = '';
+    (card.keyPoints || []).forEach(function (k) {
+      var li = document.createElement('li');
+      li.textContent = k;
+      ans.appendChild(li);
+    });
+    if (!(card.keyPoints || []).length) {
+      var li2 = document.createElement('li');
+      li2.className = 'muted';
+      li2.textContent = 'No key points — mark how it went from memory.';
+      ans.appendChild(li2);
+    }
+    ans.hidden = true;
+    document.getElementById('rrFlip').hidden = false;
+    document.getElementById('rrRates').hidden = true;
+  }
+
+  function reviewFlip() {
+    if (!review || !document.getElementById('rrFlip') || document.getElementById('rrFlip').hidden) return;
+    document.getElementById('rrAnswer').hidden = false;
+    document.getElementById('rrFlip').hidden = true;
+    document.getElementById('rrRates').hidden = false;
+    var card = review.cards[review.idx];
+    ['again', 'hard', 'good', 'easy'].forEach(function (r) {
+      document.getElementById('int-' + r).textContent = previewInterval(card, r);
+    });
+  }
+
+  function reviewRate(rating) {
+    if (!review || document.getElementById('rrRates').hidden) return;
+    var card = review.cards[review.idx];
+    rateReview(review.date, { id: card.id, key: card.key, type: card.type }, rating);
+    review.ratings[rating]++;
+    review.idx++;
+    if (review.idx >= review.cards.length) { endReview(true); return; }
+    renderReviewCard();
+  }
+
+  function endReview(completed) {
+    var r = review;
+    review = null;
+    document.getElementById('reviewRoom').hidden = true;
+    document.body.classList.remove('reviewing');
+    if (r && completed) showSummary(r);
+    render();
+  }
+
+  function sumCell(val, label) {
+    return '<div class="sum-cell"><div class="sum-val">' + esc(val) + '</div>' +
+      '<div class="sum-label">' + esc(label) + '</div></div>';
+  }
+
+  function showSummary(r) {
+    var total = r.ratings.again + r.ratings.hard + r.ratings.good + r.ratings.easy;
+    var mins = Math.max(1, Math.round((Date.now() - r.startedAt) / 60000));
+    var againPct = total ? Math.round(r.ratings.again / total * 100) : 0;
+    var streak = L.computeStreak(dayDoneCounts(), todayISO());
+    document.getElementById('sumGrid').innerHTML =
+      sumCell(String(total), 'cards reviewed') +
+      sumCell(againPct + '%', 'rated Again') +
+      sumCell(mins + ' min', 'session time') +
+      sumCell(streak + (streak === 1 ? ' day' : ' days'), 'streak');
+    document.getElementById('sessionSummary').hidden = false;
+    document.body.classList.add('reviewing');
+  }
+
+  function closeSummary() {
+    document.getElementById('sessionSummary').hidden = true;
+    document.body.classList.remove('reviewing');
+    showTab('today');
+  }
+
+  /* ---------- flashcards ---------- */
+  /* ---------- flashcards ---------- */
+  var drill = null; // legacy entry point — the drill now runs in the review room
+
+  function renderDrill() {
+    var t = todayISO();
+    var deck = state.plan ? L.drillDeck(state.plan, state.days, t) : [];
+    if (deck.length) startReview(deck, 'Self-test drill');
+    drill = null;
   }
 
   function renderCards() {
     var wrap = document.getElementById('view-cards');
     wrap.innerHTML = '';
-    if (drill) { renderDrill(wrap); return; }
     if (!state.config) { wrap.appendChild(el('p', 'muted', 'No subjects yet.')); return; }
     wrap.appendChild(el('h2', null, 'Flashcards'));
 
@@ -607,7 +751,7 @@
       cta.appendChild(el('p', null, 'Self-test drill: ' + deck.length +
         ' cards from today\'s queue. Flip each one, then rate your recall — ratings feed the spaced-repetition scheduler.'));
       var start = el('button', 'btn primary', 'Start drill');
-      start.onclick = function () { drill = { cards: deck, idx: 0, date: t }; renderDrill(wrap); };
+      start.onclick = function () { drill = { cards: deck, idx: 0, date: t }; renderDrill(); };
       cta.appendChild(start);
       wrap.appendChild(cta);
     } else if (state.plan) {
@@ -666,7 +810,22 @@
   }
 
   /* ---------- boot ---------- */
+  function updateHeaderStats() {
+    var sn = document.getElementById('streakNum');
+    if (sn) sn.textContent = state.plan ? L.computeStreak(dayDoneCounts(), todayISO()) : 0;
+    var ep = document.getElementById('examPill');
+    if (ep) {
+      if (state.config && state.config.examDate) {
+        var n = L.daysBetween(todayISO(), state.config.examDate);
+        ep.textContent = n <= 0 ? 'Exam day' : n + (n === 1 ? ' day' : ' days') + ' to exam';
+      } else {
+        ep.textContent = '';
+      }
+    }
+  }
+
   function render() {
+    updateHeaderStats();
     var active = document.querySelector('#tabs button.active');
     showTab(active ? active.dataset.tab : (state.plan ? 'today' : 'setup'));
   }
@@ -674,6 +833,25 @@
   document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('#tabs button').forEach(function (b) {
       b.onclick = function () { showTab(b.dataset.tab); };
+    });
+    // Review room controls + keyboard (Anki: Space to flip, 1-4 to rate).
+    document.getElementById('rrFlip').onclick = reviewFlip;
+    document.getElementById('rrEnd').onclick = function () { endReview(false); };
+    document.getElementById('sumDone').onclick = closeSummary;
+    document.querySelectorAll('.rr-rates .rate').forEach(function (b) {
+      b.onclick = function () { reviewRate(b.dataset.rating); };
+    });
+    document.addEventListener('keydown', function (e) {
+      var rr = document.getElementById('reviewRoom');
+      if (!review || rr.hidden) return;
+      var flipHidden = document.getElementById('rrFlip').hidden;
+      var ratesHidden = document.getElementById('rrRates').hidden;
+      if (e.code === 'Space' && !flipHidden) { e.preventDefault(); reviewFlip(); }
+      else if (!ratesHidden) {
+        var map = { Digit1: 'again', Digit2: 'hard', Digit3: 'good', Digit4: 'easy',
+                    Numpad1: 'again', Numpad2: 'hard', Numpad3: 'good', Numpad4: 'easy' };
+        if (map[e.code]) { e.preventDefault(); reviewRate(map[e.code]); }
+      } else if (e.key === 'Escape') { endReview(false); }
     });
     render();
   });

@@ -87,6 +87,22 @@ console.log('new logic API ok');
 
 grep -q 'renderDrill' js/app.js && ok "app.js has drill mode" || bad "app.js missing drill mode"
 grep -q 'planToICS' js/app.js && ok "app.js wires ICS download" || bad "app.js missing ICS wiring"
+
+# --- review-room redesign checks ---
+for id in reviewRoom rrDeck rrProgress rrEnd rrCard rrBadge rrTopic rrSubject rrPrompt rrAnswer rrFlip rrRates sessionSummary sumGrid sumDone streakPill streakNum examPill; do
+  grep -q "id=\"$id\"" index.html && ok "index.html has review-room #$id" || bad "index.html missing #$id"
+done
+for needle in startReview renderReviewCard reviewFlip reviewRate endReview showSummary closeSummary intervalLabel previewInterval dueCountsFor updateHeaderStats sumCell; do
+  grep -q "$needle" js/app.js && ok "app.js wires $needle" || bad "app.js missing $needle"
+done
+grep -q 'data-rating="again"' index.html && grep -q 'id="int-good"' index.html \
+  && ok "rating buttons have interval labels" || bad "rating buttons missing intervals"
+grep -q 'Digit1' js/app.js && grep -q "Space" js/app.js \
+  && ok "keyboard shortcuts wired (Space/1-4)" || bad "keyboard shortcuts missing"
+for needle in review-room rr-rates due-hero deck-grid deck-card due-chip; do
+  grep -q "$needle" css/style.css && ok "css has .$needle" || bad "css missing .$needle"
+done
+! grep -q 'border-radius:[ ]*[1-9]' css/style.css && ok "no rounded corners in css" || bad "rounded corners found"
 grep -q 'parseStateImport' js/app.js && ok "app.js wires backup import" || bad "app.js missing import wiring"
 grep -q 'Export backup' js/app.js && ok "app.js has backup export button" || bad "app.js missing export button"
 

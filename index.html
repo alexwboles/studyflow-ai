@@ -3,17 +3,21 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>StudyFlow — AI study planner with spaced repetition</title>
+<title>StudyFlow — the review room</title>
+<meta name="description" content="Spaced-repetition study planner: decks, due counts, and Anki-grade review sessions — all in your browser.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-<header>
+<header class="topbar">
   <div class="container header-inner">
-    <div class="brand"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 21v-7m0 0c0-4.5-3.5-8-8.5-9 .8 5.5 4 8.5 8.5 9zm0 0c0-4.5 3.5-8 8.5-9-.8 5.5-4 8.5-8.5 9z"/></svg>StudyFlow</div>
-    <p class="tagline">Spaced repetition, minus the cramming.</p>
+    <div class="brand"><span class="brand-mark" aria-hidden="true">S</span><span>StudyFlow <em>AI</em></span></div>
+    <div class="header-stats">
+      <span class="streak" id="streakPill" title="Daily streak"><span aria-hidden="true">▲</span> <b id="streakNum">0</b></span>
+      <span class="exam-count" id="examPill"></span>
+    </div>
   </div>
 </header>
 
@@ -37,9 +41,50 @@
 
 <footer>
   <div class="container">
-    <p class="muted small">StudyFlow runs 100% in your browser. Your plan never leaves this device.</p>
+    <p class="muted small">StudyFlow runs 100% in your browser. Your plan never leaves this device. · <a href="https://github.com/alexwboles/studyflow-ai">GitHub</a></p>
   </div>
 </footer>
+
+<!-- ============ REVIEW ROOM (Anki pattern) ============ -->
+<div id="reviewRoom" class="review-room" hidden role="dialog" aria-label="Review session">
+  <div class="rr-top">
+    <div class="rr-deck" id="rrDeck">Deck</div>
+    <div class="rr-progress" id="rrProgress">Card 1 of 1</div>
+    <button class="rr-end" id="rrEnd" type="button">End session</button>
+  </div>
+  <div class="rr-stage">
+    <div class="rr-card" id="rrCard">
+      <div class="rr-badge" id="rrBadge">REVIEW</div>
+      <h2 class="rr-topic" id="rrTopic">Topic</h2>
+      <p class="rr-subject" id="rrSubject">Subject</p>
+      <div class="rr-divider" aria-hidden="true"></div>
+      <p class="rr-prompt" id="rrPrompt">Recall the key points, then reveal.</p>
+      <ul class="rr-answer" id="rrAnswer" hidden></ul>
+      <button class="btn primary big" id="rrFlip" type="button">Show answer <kbd>Space</kbd></button>
+    </div>
+  </div>
+  <div class="rr-rates" id="rrRates" hidden>
+    <button class="rate rate-again" data-rating="again" type="button"><b>Again</b><span id="int-again">1d</span><kbd>1</kbd></button>
+    <button class="rate rate-hard" data-rating="hard" type="button"><b>Hard</b><span id="int-hard">1d</span><kbd>2</kbd></button>
+    <button class="rate rate-good" data-rating="good" type="button"><b>Good</b><span id="int-good">1d</span><kbd>3</kbd></button>
+    <button class="rate rate-easy" data-rating="easy" type="button"><b>Easy</b><span id="int-easy">1d</span><kbd>4</kbd></button>
+  </div>
+  <p class="rr-hint">Space to reveal · 1–4 to rate · the scheduler sets the next review from your rating</p>
+</div>
+
+<!-- ============ SESSION SUMMARY ============ -->
+<div id="sessionSummary" class="review-room" hidden role="dialog" aria-label="Session summary">
+  <div class="rr-stage">
+    <div class="rr-card summary-card">
+      <div class="rr-badge">SESSION COMPLETE</div>
+      <h2 class="rr-topic">Nice work.</h2>
+      <div class="sum-grid" id="sumGrid"></div>
+      <div class="sum-actions">
+        <button class="btn primary big" id="sumDone" type="button">Back to Today</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script src="js/logic.js"></script>
 <script src="js/app.js"></script>
