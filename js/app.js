@@ -72,7 +72,15 @@
   function load() {
     try { return JSON.parse(localStorage.getItem(LS_KEY)) || null; } catch (e) { return null; }
   }
-  function save(s) { localStorage.setItem(LS_KEY, JSON.stringify(s)); }
+  function save(s) {
+    try { localStorage.setItem(LS_KEY, JSON.stringify(s)); } catch (e) { /* storage blocked (e.g. sandboxed iframe) — plan keeps working in-memory for this session */ }
+  }
+
+  /* Safe wrappers for the optional OpenAI key: a blocked-storage iframe must never crash the page. */
+  function getAiKey() { try { return localStorage.getItem(LS_AIKEY) || ''; } catch (e) { return ''; } }
+  function setAiKey(v) {
+    try { if (v) localStorage.setItem(LS_AIKEY, v); else localStorage.removeItem(LS_AIKEY); } catch (e) {}
+  }
 
   function downloadText(filename, text, mime) {
     var blob = new Blob([text], { type: mime || 'text/plain;charset=utf-8' });
@@ -218,10 +226,9 @@
     var keyInput = el('input');
     keyInput.type = 'password';
     keyInput.placeholder = 'sk-... (never required)';
-    keyInput.value = localStorage.getItem(LS_AIKEY) || '';
+    keyInput.value = getAiKey();
     keyInput.onchange = function () {
-      if (keyInput.value) localStorage.setItem(LS_AIKEY, keyInput.value);
-      else localStorage.removeItem(LS_AIKEY);
+      setAiKey(keyInput.value);
     };
     keyRow.appendChild(keyInput); set.appendChild(keyRow);
     set.appendChild(el('p', 'muted small', 'Everything works offline without a key. The key only powers optional "Explain" buttons on flashcards and never leaves your browser except to api.openai.com.'));
@@ -782,7 +789,7 @@
   }
 
   function explainWithAI(btn, subject, topic) {
-    var key = localStorage.getItem(LS_AIKEY);
+    var key = getAiKey();
     var note = btn.parentElement.parentElement.querySelector('.ai-note') || (function () {
       var p = el('p', 'ai-note small');
       btn.parentElement.parentElement.appendChild(p);
